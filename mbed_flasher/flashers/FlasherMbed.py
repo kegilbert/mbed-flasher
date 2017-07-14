@@ -75,7 +75,7 @@ class FlasherMbed(object):
     def auxiliary_drive_check(self, drive):
         out = os.listdir(drive[0])
         for item in out:
-            if item.find('.HTM') != -1:
+            if item.lower().find('.htm') != -1:
                 break
         else:
             return False
@@ -92,7 +92,7 @@ class FlasherMbed(object):
                 proc = Popen(["ls", drive[0]], stdin=PIPE, stdout=PIPE, stderr=PIPE)
             out = proc.stdout.read()
             proc.communicate()
-            if out.find(b'.HTM') != -1:
+            if out.lower().find(b'.htm') != -1:
                 if out.find(drive[1].encode()) == -1:
                     break
             if platform.system() == 'Windows':
