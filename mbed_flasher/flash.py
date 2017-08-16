@@ -17,6 +17,8 @@ limitations under the License.
 from os.path import isfile
 import platform
 from mbed_flasher.common import Logger
+from time import sleep
+import sqlite3
 
 EXIT_CODE_NO_PLATFORM_GIVEN = 35
 EXIT_CODE_COULD_NOT_MAP_TARGET_ID_TO_DEVICE = 40
@@ -245,6 +247,23 @@ class Flash(object):
         except SystemExit:
             self.logger.error("Aborted by SystemExit event")
             return EXIT_CODE_SYSTEM_INTERRUPT
+
+        sleep(2)
+        print("============ Flashing Vars ===========")
+        mount_point       = device_mapping_table[0]["mount_point"]
+        mount_details_log = open(mount_point + "/DETAILS.TXT", 'r').read()
+        remount_line      = mount_details_log.find("Remount count:")
+        remount_count     = int(mount_details_log[remount_line:-2].split(':')[1])
+        print("Remount count from DETAILS log: %d" % remount_count)
+        conn = sqlite3.connect("/home/ci/raas/raas-daemon/mounts3.db")
+        c = conn.cursor()
+        remount_count_ldm = c.execute("select mc from mounts where mp like '%s'"
+                                 % str('%'+mount_point+'%')).fetchone()[0]
+        print("Remount count from LDM log: %d" % remount_count_ldm)
+        print("______________________________________")
+
+        if abs(remount_count - remount_count_ldm) > 1:
+            self.logger.info("flash failed, additional remounts detected")
 
         if retcode == 0:
             self.logger.info("flash ready")
