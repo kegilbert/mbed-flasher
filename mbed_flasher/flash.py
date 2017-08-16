@@ -17,8 +17,6 @@ limitations under the License.
 from os.path import isfile
 import platform
 from mbed_flasher.common import Logger
-from time import sleep
-import sqlite3
 
 EXIT_CODE_NO_PLATFORM_GIVEN = 35
 EXIT_CODE_COULD_NOT_MAP_TARGET_ID_TO_DEVICE = 40
@@ -39,6 +37,7 @@ class Flash(object):
         self.logger = logger.logger
         self.FLASHERS = self.__get_flashers()
         self.SUPPORTED_TARGETS = self.__update_supported_targets()
+        self.retry_flash_count = 3
 
     def get_supported_targets(self):
         return self.SUPPORTED_TARGETS
@@ -239,34 +238,19 @@ class Flash(object):
         self.logger.debug("Flashing: %s", target_mbed["target_id"])
 
         flasher = self.__get_flasher(platform_name)
-        try:
-            retcode = flasher.flash(source=build, target=target_mbed, method=method, no_reset=no_reset)
-        except KeyboardInterrupt:
-            self.logger.error("Aborted by user")
-            return EXIT_CODE_KEYBOARD_INTERRUPT
-        except SystemExit:
-            self.logger.error("Aborted by SystemExit event")
-            return EXIT_CODE_SYSTEM_INTERRUPT
+        for i in range(0, self.flash_retry_count):
+            try:
+                retcode = flasher.flash(source=build, target=target_mbed, method=method, no_reset=no_reset)
+            except KeyboardInterrupt:
+                self.logger.error("Aborted by user")
+                return EXIT_CODE_KEYBOARD_INTERRUPT
+            except SystemExit:
+                self.logger.error("Aborted by SystemExit event")
+                return EXIT_CODE_SYSTEM_INTERRUPT
 
-        sleep(2)
-        print("============ Flashing Vars ===========")
-        mount_point       = device_mapping_table[0]["mount_point"]
-        mount_details_log = open(mount_point + "/DETAILS.TXT", 'r').read()
-        remount_line      = mount_details_log.find("Remount count:")
-        remount_count     = int(mount_details_log[remount_line:-2].split(':')[1])
-        print("Remount count from DETAILS log: %d" % remount_count)
-        conn = sqlite3.connect("/home/ci/raas/raas-daemon/mounts3.db")
-        c = conn.cursor()
-        remount_count_ldm = c.execute("select mc from mounts where mp like '%s'"
-                                 % str('%'+mount_point+'%')).fetchone()[0]
-        print("Remount count from LDM log: %d" % remount_count_ldm)
-        print("______________________________________")
-
-        if abs(remount_count - remount_count_ldm) > 1:
-            self.logger.info("flash failed, additional remounts detected")
-
-        if retcode == 0:
-            self.logger.info("flash ready")
-        else:
-            self.logger.info("flash fails")
+            if retcode == 0:
+                self.logger.info("flash ready")
+                break
+            else:
+                self.logger.info("flash fails")
         return retcode
